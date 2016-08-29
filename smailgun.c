@@ -159,12 +159,117 @@ void die(char *format, ...) {
 }
 
 /*
-rcpt_save() -- Store entry into RCPT list
+ *strip_pre_ws() -- Return pointer to first non-whitespace character
+ */
+char *strip_pre_ws(char *str) {
+	char *p;
+
+	p = str;
+	while (*p && isspace(*p))
+		p++;
+
+	return p;
+}
+
+/*
+ * strip_post_ws() -- Return pointer to last non-whitespace character
+ */
+char *strip_post_ws(char *str) {
+	char *p;
+
+	p = (str + strlen(str));
+	while (isspace(*--p)) {
+		*p = '\0';
+	}
+
+	return p;
+}
+
+/*
+ * addr_parse() -- Parse <user@domain.com> from full email address
+ */
+char *addr_parse(char *str) {
+	char *p, *q;
+
+#if 0
+	fprintf(stdout, "*** addr_parse(): str = [%s]\n", str);
+#endif
+
+	/* Simple case with email address enclosed in <> */
+	if((p = strdup(str)) == (char *)NULL) {
+		die("addr_parse(): strdup()");
+	}
+
+	if((q = strchr(p, '<'))) {
+		q++;
+
+		if((p = strchr(q, '>'))) {
+			*p = '\0';
+		}
+
+#if 0
+		fprintf(stdout, "*** addr_parse(): q = [%s]\n", q);
+#endif
+
+		return(q);
+	}
+
+	q = strip_pre_ws(p);
+	if (*q == '(') {
+		while ((*q++ != ')'));
+	}
+	p = strip_pre_ws(q);
+
+#if 0
+	fprintf(stdout, "*** addr_parse(): p = [%s]\n", p);
+#endif
+
+	q = strip_post_ws(p);
+	if (*q == ')') {
+		while ((*--q != '('));
+		*q = '\0';
+	}
+	strip_post_ws(p);
+
+#if 0
+	fprintf(stdout, "*** addr_parse(): p = [%s]\n", p);
+#endif
+
+	return(p);
+}
+
+/* 
+ * from_strip() -- Transforms "Name <login@host>" into "login@host" or "login@host (Real name)"
 */
+char *from_strip(char *str) {
+	char *p;
+
+#if 0
+	fprintf(stdout, "*** from_strip(): str = [%s]\n", str);
+#endif
+
+	if(strncmp("From:", str, 5) == 0) {
+		str += 5;
+	}
+
+	/* Remove the real name if necessary - just send the address */
+	if((p = addr_parse(str)) == (char *)NULL) {
+		die("from_strip() -- addr_parse() failed");
+	}
+#if 0
+	fprintf(stdout, "*** from_strip(): p = [%s]\n", p);
+#endif
+
+	return(strdup(p));
+}
+
+/*
+ * rcpt_save() -- Store entry into RCPT list
+ */
 void rcpt_save(char *str) {
 	char *p;
 
-# if 1
+#if 1
 	/* Horrible botch for group stuff */
 	p = str;
 	while(*p)
@@ -176,20 +281,20 @@ void rcpt_save(char *str) {
 #endif
 
 #if 1
-	(void)fprintf(stderr, "*** rcpt_save(): str = [%s]\n", str);
+	fprintf(stdout, "*** rcpt_save(): str = [%s]\n", str);
 #endif
 
 	/* Ignore missing usernames */
-	if(*str == '\0') {
+	if (*str == '\0') {
 		return;
 	}
 
-	if((rt->string = strdup(str)) == (char *)NULL) {
+	if ((rt->string = strdup(str)) == (char *)NULL) {
 		die("rcpt_save() -- strdup() failed");
 	}
 
 	rt->next = (rcpt_t *)malloc(sizeof(rcpt_t));
-	if(rt->next == (rcpt_t *)NULL) {
+	if (rt->next == (rcpt_t *)NULL) {
 		die("rcpt_save() -- malloc() failed");
 	}
 	rt = rt->next;
@@ -214,8 +319,8 @@ void rcpt_parse(char *str) {
 	q = p;
 
 	/* Replace <CR>, <LF> and <TAB> */
-	while(*q) {
-		switch(*q) {
+	while (*q) {
+		switch (*q) {
 			case '\t':
 			case '\n':
 			case '\r':
@@ -251,8 +356,7 @@ void rcpt_parse(char *str) {
 			while (*r && isspace(*r))
 				r++;
 
-			puts(r);
-			//rcpt_save(addr_parse(r));
+			rcpt_save(addr_parse(r));
 			r = (q + 1);
 #if 1
 			fprintf(stdout, "*** rcpt_parse(): r = [%s]\n", r);
@@ -270,15 +374,13 @@ void rcpt_parse(char *str) {
 void header_save(char *str) {
 	char *p;
 
-#if 1
+#if 0
 	fprintf(stdout, "header_save(): str = [%s]\n", str);
 #endif
 
 	if ((p = strdup(str)) == (char *)NULL) {
 		die("header_save() -- strdup() failed");
 	}
-	puts("p");
-	puts(p);
 	ht->string = p;
 
 	if (strncasecmp(ht->string, "From:", 5) == 0) {
@@ -287,13 +389,9 @@ void header_save(char *str) {
 			return;
 		}
 
-#ifdef REWRITE_DOMAIN
 		if (override_from == 1) {
-			uad = from_strip(ht->string);
-		} else {
-			return;
+			from = from_strip(ht->string);
 		}
-#endif
 		have_from = 1;
 	} else if(strncasecmp(ht->string, "To:" ,3) == 0) {
 		have_to = 1;
@@ -308,18 +406,18 @@ void header_save(char *str) {
 			rcpt_parse(p);
 		} else if(strncasecmp(ht->string, "Bcc:", 4) == 0) {
 			p = (ht->string + 4);
-			//rcpt_parse(p);
+			rcpt_parse(p);
            /* Undo adding the header to the list: */
            free(ht->string);
            ht->string = NULL;
            return;
 		} else if(strncasecmp(ht->string, "CC:", 3) == 0) {
 			p = (ht->string + 3);
-			//rcpt_parse(p);
+			rcpt_parse(p);
 		}
 	}
 
-#if 1
+#if 0
 	fprintf(stdout, "header_save(): ht->string = [%s]\n", ht->string);
 #endif
 
@@ -601,9 +699,28 @@ int smailgun(char *argv[]) {
 	printf("domain => %s\n", domain);
 	printf("API => %s\n", apifull);
 
+	ht = &headers;
+
 	header_parse(stdin);
 
 	printf("from => %s\n", from);
+
+	ht = &headers;
+	while (ht->next) {
+		printf("%s\n", ht->string);
+		ht = ht->next;
+	}
+
+	int i;
+	for (i = 1; (argv[i] != NULL); ++i) {
+		char *p = strtok(argv[i], ",");
+		while(p) {
+			char *q = addr_parse(p);
+			puts(q);
+
+			p = strtok(NULL, ",");
+		}
+	}
 
 	return 0;
 
