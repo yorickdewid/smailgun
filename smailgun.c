@@ -80,7 +80,7 @@ char *config_file = NULL;
 int log_level = 1;
 int have_to = 0;
 int have_date = 0;
-int minuserid = 0;//MAXSYSUID+1;
+int minuserid = 0;
 
 struct string_list {
 	char *string;
